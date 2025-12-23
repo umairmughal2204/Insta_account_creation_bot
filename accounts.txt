@@ -1,0 +1,6 @@
+# email,password,full_name,username
+brand.co1101@gmail.com,Password123!@#,Umair,umair_1101_1
+bran.dco1101@gmail.com,Password123!@#,Umair,umair_1101_2
+brandc.o1101@gmail.com,Password123!@#,Umair,umair_1101_3
+br.andco1101@gmail.com,Password123!@#,Umair,umair_1101_4
+b.randco1101@gmail.com,Password123!@#,Umair,umair_1101_5

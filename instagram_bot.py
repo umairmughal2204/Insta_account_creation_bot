@@ -11,12 +11,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import Select
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import StaleElementReferenceException, NoSuchWindowException
 import time
 import random
 import datetime
 import os
 import json
 import re
+import pathlib
 
 
 class InstagramSignupBot:
@@ -214,6 +217,28 @@ def load_config(path: str = "config.json") -> dict:
         return json.load(f)
 
 
+def load_accounts(path: str = "accounts.txt") -> list[dict]:
+    """Load accounts from accounts.txt (email,password,full_name,username). Lines starting with # are ignored."""
+    accounts = []
+    if not os.path.exists(path):
+        return accounts
+    with open(path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = [p.strip() for p in line.split(",")]
+            if len(parts) < 4:
+                continue
+            accounts.append({
+                "email": parts[0],
+                "password": parts[1],
+                "full_name": parts[2],
+                "username": parts[3]
+            })
+    return accounts
+
+
 def fetch_latest_code_via_gmail_tab(driver, gmail_user: str, gmail_password: str, timeout_sec: int = 180) -> str:
     """Login to Gmail in a new tab (basic HTML view), open the latest Instagram email, and return a 6-digit code."""
     code_regex = re.compile(r"\b(\d{6})\b")
@@ -263,6 +288,19 @@ def fetch_latest_code_via_gmail_tab(driver, gmail_user: str, gmail_password: str
         gmail_inbox_url = f"https://mail.google.com/mail/u/0/"
         driver.get(gmail_inbox_url)
         time.sleep(5)
+
+        # Dismiss Chrome profile modal if present
+        try:
+            modal_btn = WebDriverWait(driver, 3).until(
+                EC.element_to_be_clickable((By.XPATH, "//span[contains(text(),'Use Chrome without an account')]/ancestor::button | //span[contains(text(),'Continue as')]/ancestor::button"))
+            )
+            modal_btn.click()
+            time.sleep(1)
+        except Exception:
+            try:
+                driver.find_element(By.TAG_NAME, "body").send_keys(Keys.ESCAPE)
+            except Exception:
+                pass
         
         # Check if still on workspace page, then force navigate
         if "workspace.google.com" in driver.current_url:
@@ -295,47 +333,66 @@ def fetch_latest_code_via_gmail_tab(driver, gmail_user: str, gmail_password: str
         while time.time() < end_time and not code:
             attempt += 1
             print(f"Attempt {attempt}: Searching for Instagram code...")
-            
-            try:
-                # Refresh inbox
-                driver.get("https://mail.google.com/mail/u/0/")
-                time.sleep(3)
 
-                # Scan visible rows for Instagram codes
-                rows = driver.find_elements(By.CSS_SELECTOR, "tr.zA")
-                found_in_row = False
-                for row in rows[:15]:  # limit to first 15
-                    text = row.text
-                    if "Instagram" not in text:
-                        continue
-                    match = code_regex.search(text)
-                    if match:
-                        code = match.group(1)
-                        print(f"Extracted code from inbox row: {code}")
-                        found_in_row = True
-                        break
-                    # Open the email to extract from body
+            try:
+                # Navigate directly to Gmail search results for reliability
+                search_url_direct = "https://mail.google.com/mail/u/0/#search/is+your+Instagram+code"
+                driver.get(search_url_direct)
+                # Wait for result rows
+                rows = WebDriverWait(driver, 10).until(
+                    EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr.zA"))
+                )
+                found = False
+                for row in rows[:12]:
                     try:
+                        row_text = row.get_attribute("innerText") or row.text
+                        match = code_regex.search(row_text)
+                        if match:
+                            code = match.group(1)
+                            print(f"Extracted code from search row: {code}")
+                            found = True
+                            break
+                        # Open the row and parse email body
                         row.click()
-                        time.sleep(2)
-                        body_text = driver.find_element(By.TAG_NAME, "body").text
+                        WebDriverWait(driver, 10).until(
+                            EC.visibility_of_element_located((By.CSS_SELECTOR, "div.a3s"))
+                        )
+                        body_text = driver.find_element(By.CSS_SELECTOR, "div.a3s").text
                         match_body = code_regex.search(body_text)
                         if match_body:
                             code = match_body.group(1)
                             print(f"Extracted code from email body: {code}")
-                            found_in_row = True
+                            found = True
                             break
+                    except StaleElementReferenceException:
+                        # Re-fetch rows and continue
+                        rows = driver.find_elements(By.CSS_SELECTOR, "tr.zA")
+                        continue
                     finally:
-                        # Go back to inbox for next attempt
-                        driver.get("https://mail.google.com/mail/u/0/")
-                        time.sleep(2)
-
-                if found_in_row and code:
+                        # Go back to search results if opened
+                        try:
+                            driver.get(search_url_direct)
+                            WebDriverWait(driver, 5).until(
+                                EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr.zA"))
+                            )
+                        except Exception:
+                            pass
+                if found and code:
                     break
-
                 print("No Instagram code found yet, retrying in 5 seconds...")
                 time.sleep(5)
-                
+            except (StaleElementReferenceException, NoSuchWindowException) as e:
+                print(f"Window or element stale, re-opening Gmail tab: {e}")
+                # Reopen Gmail tab and continue
+                try:
+                    driver.switch_to.window(parent)
+                except Exception:
+                    pass
+                switch_to_new_tab(login_url)
+                maybe_login_gmail()
+                driver.get(gmail_inbox_url)
+                time.sleep(3)
+                continue
             except Exception as e:
                 print(f"Error searching for code: {e}")
                 time.sleep(5)
@@ -392,6 +449,55 @@ def submit_email_code(driver, code: str):
     print("✓ Verification code submitted")
 
 
+def signup_one_account(user_data: dict, gmail_user: str, gmail_password: str) -> bool:
+    """Signup a single Instagram account with provided user_data.
+    Returns True on success, False otherwise."""
+    bot = InstagramSignupBot()
+    try:
+        bot.start_driver()
+        bot.open_instagram_signup()
+        bot.fill_signup_form(
+            email=user_data['email'],
+            full_name=user_data['full_name'],
+            username=user_data['username'],
+            password=user_data['password']
+        )
+        bot.click_signup_button()
+
+        # Optional DOB step
+        try:
+            today = datetime.date.today()
+            max_age, min_age = 35, 19
+            latest = today.replace(year=today.year - min_age)
+            earliest = today.replace(year=today.year - max_age)
+            delta_days = (latest - earliest).days
+            random_days = random.randint(0, delta_days)
+            birth_date = earliest + datetime.timedelta(days=random_days)
+            bot.handle_birthday_selection(birth_date)
+        except Exception:
+            pass
+
+        # Fetch and submit code
+        print("Waiting for email verification code via Gmail tab...")
+        code = fetch_latest_code_via_gmail_tab(bot.driver, gmail_user, gmail_password)
+        print(f"✓ Code received: {code}")
+        submit_email_code(bot.driver, code)
+        return True
+    except Exception as e:
+        print(f"Signup failed for {user_data.get('email')}: {e}")
+        return False
+    finally:
+        bot.close()
+
+
+def append_account_result(path: str, user_data: dict, status: str):
+    try:
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(f"{user_data['email']},{user_data['username']},{status}\n")
+    except Exception as e:
+        print(f"Could not write result to {path}: {e}")
+
+
 def main():
     """Main function to run the bot"""
     print("\n" + "="*60)
@@ -417,10 +523,20 @@ def main():
             return val
         return input(prompt_text).strip()
 
-    email_addr = get_or_prompt("signup_email", "Enter your email (Gmail recommended): ")
-    full_name = get_or_prompt("signup_full_name", "Enter your full name: ")
-    username = get_or_prompt("signup_username", "Enter desired username: ")
-    password = get_or_prompt("signup_password", "Enter password (min 6 characters): ")
+    # Prefer accounts.txt if present
+    accounts = load_accounts()
+    if accounts:
+        acct = accounts[0]
+        email_addr = acct["email"]
+        full_name = acct["full_name"]
+        username = acct["username"]
+        password = acct["password"]
+        print(f"Using account from accounts.txt: {email_addr} / {username}")
+    else:
+        email_addr = get_or_prompt("signup_email", "Enter your email (Gmail recommended): ")
+        full_name = get_or_prompt("signup_full_name", "Enter your full name: ")
+        username = get_or_prompt("signup_username", "Enter desired username: ")
+        password = get_or_prompt("signup_password", "Enter password (min 6 characters): ")
 
     # Validate inputs
     if not all([email_addr, full_name, username, password]):
@@ -450,55 +566,32 @@ def main():
             print("Account creation cancelled.")
             return
     
-    # Create bot instance
-    bot = InstagramSignupBot()
-    
-    try:
-        # Start the driver
-        bot.start_driver()
-        
-        # Open Instagram signup page
-        bot.open_instagram_signup()
-        
-        # Fill the signup form
-        bot.fill_signup_form(
-            email=user_data['email'],
-            full_name=user_data['full_name'],
-            username=user_data['username'],
-            password=user_data['password']
-        )
-        
-        # Click signup button
-        bot.click_signup_button()
+    # Bulk-create mode: iterate accounts.txt if bulk_create=true
+    if config.get("bulk_create", False):
+        results_path = "accounts_created.txt"
+        accounts = load_accounts()
+        if not accounts:
+            print("No accounts found in accounts.txt for bulk create.")
+            return
+        print(f"Bulk creating {len(accounts)} accounts...")
+        for i, acct in enumerate(accounts, start=1):
+            print("\n" + "-"*60)
+            print(f"[{i}/{len(accounts)}] Creating: {acct['email']} / {acct['username']}")
+            success = signup_one_account(acct, gmail_user, gmail_password)
+            append_account_result(results_path, acct, "success" if success else "failed")
+            # Small delay to avoid rate limits
+            time.sleep(5)
+        print("Bulk create finished. See accounts_created.txt for results.")
+        return
 
-        # Handle birthday selection if prompted (use random adult DOB 19-35 years old)
-        today = datetime.date.today()
-        max_age, min_age = 35, 19
-        latest = today.replace(year=today.year - min_age)
-        earliest = today.replace(year=today.year - max_age)
-        delta_days = (latest - earliest).days
-        random_days = random.randint(0, delta_days)
-        birth_date = earliest + datetime.timedelta(days=random_days)
-        bot.handle_birthday_selection(birth_date)
-
-        # Wait for Instagram to send code and fetch from Gmail (browser tab)
-        print("Waiting for email verification code via Gmail tab...")
-        code = fetch_latest_code_via_gmail_tab(bot.driver, gmail_user, gmail_password)
-        print(f"✓ Code received: {code}")
-        submit_email_code(bot.driver, code)
-        
-        print("\n" + "="*60)
-        print("Bot execution completed!")
-        print("Note: Instagram may require additional verification")
-        print("(email confirmation, phone number, CAPTCHA, etc.)")
-        print("="*60 + "\n")
-        
-    except Exception as e:
-        print(f"\n✗ Bot encountered an error: {e}")
-    
-    finally:
-        # Close the browser
-        bot.close()
+    # Single account flow
+    success = signup_one_account(user_data, gmail_user, gmail_password)
+    append_account_result("accounts_created.txt", user_data, "success" if success else "failed")
+    print("\n" + "="*60)
+    print("Bot execution completed!")
+    print("Note: Instagram may require additional verification")
+    print("(email confirmation, phone number, CAPTCHA, etc.)")
+    print("="*60 + "\n")
 
 
 if __name__ == "__main__":

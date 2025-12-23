@@ -1,0 +1,8 @@
+bra.ndco1101@gmail.com,umair_1101_1,failed
+bra.ndco1101@gmail.com,umair_1101_1,failed
+bra.ndco1101@gmail.com,umair_1101_1,success
+brand.co1101@gmail.com,umair_1101_1,success
+bran.dco1101@gmail.com,umair_1101_2,success
+brandc.o1101@gmail.com,umair_1101_3,success
+br.andco1101@gmail.com,umair_1101_4,failed
+b.randco1101@gmail.com,umair_1101_5,success

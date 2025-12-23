@@ -6,5 +6,6 @@
   "signup_full_name": "Umair",
   "signup_username": "umair_1234554321",
   "signup_password": "Password123!@#",
-  "auto_confirm": true
+  "auto_confirm": true,
+  "bulk_create": true
 }
