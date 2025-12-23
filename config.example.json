@@ -1,0 +1,12 @@
+{
+  "gmail_user": "bitf22m012@pucit.edu.pk",
+  "gmail_app_password": "Umair2204***"
+{
+  "gmail_user": "your_email@gmail.com",
+  "gmail_password": "your_password_or_app_password",
+  "signup_email": "your_email@gmail.com",
+  "signup_full_name": "Your Name",
+  "signup_username": "desired_username",
+  "signup_password": "Password123",
+  "auto_confirm": true
+}
