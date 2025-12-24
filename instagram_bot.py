@@ -23,7 +23,7 @@ import pathlib
 
 
 class InstagramSignupBot:
-    def __init__(self):
+    def __init__(self, extension_path=None):
         """Initialize the bot with Chrome options"""
         self.chrome_options = Options()
         # Uncomment the line below to run in headless mode (no browser window)
@@ -31,6 +31,18 @@ class InstagramSignupBot:
         self.chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         self.chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         self.chrome_options.add_experimental_option('useAutomationExtension', False)
+        
+        # Disable Chrome's extension blocking for automation
+        self.chrome_options.add_argument('--disable-extensions-except=' + extension_path if extension_path else '')
+        self.chrome_options.add_argument('--enable-automation')
+        
+        # Load Chrome extension if path provided
+        if extension_path and os.path.exists(extension_path):
+            self.chrome_options.add_argument(f'--load-extension={extension_path}')
+            print(f"✓ Chrome extension path configured: {extension_path}")
+            print("  Note: Extension will load when Chrome starts")
+        elif extension_path:
+            print(f"⚠ Warning: Extension path not found: {extension_path}")
         
         self.driver = None
     
@@ -338,6 +350,12 @@ def fetch_latest_code_via_gmail_tab(driver, gmail_user: str, gmail_password: str
                 # Navigate directly to Gmail search results for reliability
                 search_url_direct = "https://mail.google.com/mail/u/0/#search/is+your+Instagram+code"
                 driver.get(search_url_direct)
+                time.sleep(3)
+                
+                # Refresh to get latest emails
+                driver.refresh()
+                time.sleep(5)
+                
                 # Wait for result rows
                 rows = WebDriverWait(driver, 10).until(
                     EC.presence_of_all_elements_located((By.CSS_SELECTOR, "tr.zA"))
@@ -379,8 +397,8 @@ def fetch_latest_code_via_gmail_tab(driver, gmail_user: str, gmail_password: str
                             pass
                 if found and code:
                     break
-                print("No Instagram code found yet, retrying in 5 seconds...")
-                time.sleep(5)
+                print("No Instagram code found yet, retrying in 10 seconds...")
+                time.sleep(10)
             except (StaleElementReferenceException, NoSuchWindowException) as e:
                 print(f"Window or element stale, re-opening Gmail tab: {e}")
                 # Reopen Gmail tab and continue
@@ -449,10 +467,10 @@ def submit_email_code(driver, code: str):
     print("✓ Verification code submitted")
 
 
-def signup_one_account(user_data: dict, gmail_user: str, gmail_password: str) -> bool:
+def signup_one_account(user_data: dict, gmail_user: str, gmail_password: str, extension_path=None) -> bool:
     """Signup a single Instagram account with provided user_data.
     Returns True on success, False otherwise."""
-    bot = InstagramSignupBot()
+    bot = InstagramSignupBot(extension_path=extension_path)
     try:
         bot.start_driver()
         bot.open_instagram_signup()
@@ -510,6 +528,7 @@ def main():
         config = load_config()
         gmail_user = config.get("gmail_user")
         gmail_password = config.get("gmail_password") or config.get("gmail_app_password")
+        extension_path = config.get("extension_path")  # Optional Chrome extension path
         if not gmail_user or not gmail_password:
             print("✗ Missing gmail_user or gmail_password in config.json")
             return
@@ -577,7 +596,7 @@ def main():
         for i, acct in enumerate(accounts, start=1):
             print("\n" + "-"*60)
             print(f"[{i}/{len(accounts)}] Creating: {acct['email']} / {acct['username']}")
-            success = signup_one_account(acct, gmail_user, gmail_password)
+            success = signup_one_account(acct, gmail_user, gmail_password, extension_path)
             append_account_result(results_path, acct, "success" if success else "failed")
             # Small delay to avoid rate limits
             time.sleep(5)
@@ -585,7 +604,7 @@ def main():
         return
 
     # Single account flow
-    success = signup_one_account(user_data, gmail_user, gmail_password)
+    success = signup_one_account(user_data, gmail_user, gmail_password, extension_path)
     append_account_result("accounts_created.txt", user_data, "success" if success else "failed")
     print("\n" + "="*60)
     print("Bot execution completed!")

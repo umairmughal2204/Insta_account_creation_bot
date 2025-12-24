@@ -2,10 +2,11 @@
 {
   "gmail_user": "brandco1101@gmail.com",
   "gmail_password": "pince1122",
-  "signup_email": "brandco1101@gmail.com",
+  "signup_email": "khang0325463@gmail.com",
   "signup_full_name": "Umair",
   "signup_username": "umair_1234554321",
   "signup_password": "Password123!@#",
   "auto_confirm": true,
-  "bulk_create": true
+  "bulk_create": true,
+  "extension_path": "c:\\Users\\MMT\\Desktop\\outlook_bot\\extension"
 }

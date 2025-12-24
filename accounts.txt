@@ -1,6 +1,15 @@
-# email,password,full_name,username
-brand.co1101@gmail.com,Password123!@#,Umair,umair_1101_1
-bran.dco1101@gmail.com,Password123!@#,Umair,umair_1101_2
-brandc.o1101@gmail.com,Password123!@#,Umair,umair_1101_3
-br.andco1101@gmail.com,Password123!@#,Umair,umair_1101_4
-b.randco1101@gmail.com,Password123!@#,Umair,umair_1101_5
+# email,password,full_name,usernamebra.nd۔co1101@gmail.com,Password123!@#,Umair,umair_khang_1
+
+b.ra.ndco1101@gmail.com,Password123!@#,Umair,umair_khang_3
+b.ran.dco1101@gmail.com,Password123!@#,Umair,umair_khang_4
+b.rand.co1101@gmail.com,Password123!@#,Umair,umair_khang_5
+b.randc.o1101@gmail.com,Password123!@#,Umair,umair_khang_6
+b.randco.1101@gmail.com,Password123!@#,Umair,umair_khang_7
+b.randco1.101@gmail.com,Password123!@#,Umair,umair_khangـ8
+b.randco1.101@gmail.com,Password123!@#,Umair,umair_khang_8
+b.randco11.01@gmail.com,Password123!@#,Umair,umair_khang_9
+b.randco110.1@gmail.com,Password123!@#,Umair,umair_khang_10
+b.ra.nd.co1101@gmail.com,Password123!@#,Umair,umair_khang_12
+b.ra.n.dco1.101@gmail.com,Password123!@#,Umair,umair_khang_13
+b.ra.n.dco110.1@gmail.com,Password123!@#,Umair,umair_khang_14
+
